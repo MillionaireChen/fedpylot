@@ -4,6 +4,7 @@ import argparse
 import os
 import shutil
 import sys
+from typing import List
 
 sys.path.append('yolov7')
 
@@ -58,6 +59,17 @@ def initial_broadcast(node: Node, pretrained_weights: str, data: str, cfg: str, 
     if node.rank != 0:
         node.set_weights(encrypted_data, metadata=True)
 
+def initial_broadcast_local(node: Node, pretrained_weights: str, data: str, cfg: str, hyp: str, imgsz: int) -> None:
+    """The central server initializes the checkpoint from a pretrained weights file and shares it with the clients."""
+    # if node.rank == 0:
+    #     node.initialize_model(pretrained_weights)
+    #     encrypted_data = [None] + node.get_weights(metadata=True)
+    #     node.post_init_update(data=data, cfg=cfg, hyp=hyp, imgsz=imgsz)
+    # else:
+    #     encrypted_data = None
+    # encrypted_data = comm.scatter(encrypted_data, root=0)
+    node.initialize_model(pretrained_weights)
+
 
 def federated_loop(node: Node, nrounds: int, epochs: int, saving_path: str, architecture: str, pretrained_weights: str,
                    data: str, bsz_train: int, bsz_val: int, imgsz: int, conf_thres: float, iou_thres: float, cfg: str,
@@ -90,6 +102,45 @@ def federated_loop(node: Node, nrounds: int, epochs: int, saving_path: str, arch
         sd_encrypted = comm.scatter(sd_encrypted, root=0)
         if node.rank != 0:
             node.set_weights(sd_encrypted, metadata=False)
+
+
+def aggregate_models(nodes:List[Node]):
+    pass
+
+
+def federated_loop_local_version(nodes: List[Node], nrounds: int, epochs: int, saving_path: str, architecture: str,
+                                 pretrained_weights: str,
+                                 data: str, bsz_train: int, bsz_val: int, imgsz: int, conf_thres: float,
+                                 iou_thres: float, cfg: str,
+                                 hyp: str, workers: int) -> None:
+    # 所有模型加在yolov7
+    for client in nodes:
+        initial_broadcast_local(client, pretrained_weights, data, cfg, hyp, imgsz)
+
+    """Orchestrate the federated learning experiment."""
+    for kround in range(nrounds):
+        for node in nodes:
+            # At the beginning of a round, generate and share a new symmetric key
+            # share_symmetric_key(node)
+            # If it is the first round, the central server sends the initial checkpoint to the clients
+            # Client level computation (local training)
+            node.train(nrounds, kround, epochs, architecture, data, bsz_train, imgsz, cfg, hyp, workers, saving_path)
+
+        aggregate_models(nodes)
+        nodes[0].test(kround, saving_path, data, bsz_val, imgsz, conf_thres, iou_thres)
+            # Server level computation (server optimization, re-parameterization, and evaluation on the validation set)
+            # if node.rank == 0:
+            #     sd_encrypted.pop(0)
+            #     node.aggregate(sd_encrypted)
+            #     node.reparameterize(architecture)
+            #     node.test(kround, saving_path, data, bsz_val, imgsz, conf_thres, iou_thres)
+            #     sd_encrypted = [None] + node.get_weights(metadata=False)
+            # else:
+            #     sd_encrypted = None
+            # # New weights are shared with the clients
+            # sd_encrypted = comm.scatter(sd_encrypted, root=0)
+            # if node.rank != 0:
+            #     node.set_weights(sd_encrypted, metadata=False)
 
 
 def gather_analytics(saving_path: str, node: Node) -> None:
@@ -148,14 +199,12 @@ if __name__ == "__main__":
         node.get_device_info()
         nodes.append(node)
 
-
     for node in nodes:
         # Save the number of training examples held by the clients to perform weighted average aggregation of the updates
         with open(args.data) as f:
             if node.rank != 0:
                 img_path = os.path.join(yaml.load(f, Loader=yaml.SafeLoader)['train'], f'client{node.rank}', 'images')
                 node.nsamples = len(os.listdir(img_path))
-
 
         # The clients exchange their public keys with the central server and vice-versa
         # todo: after
@@ -200,8 +249,8 @@ if __name__ == "__main__":
             shutil.copy(args.data, saving_path)
 
     # Launch federated learning experiment
-    federated_loop(
-        node=node,
+    federated_loop_local_version(
+        nodes=nodes,
         nrounds=args.nrounds,
         epochs=args.epochs,
         saving_path=saving_path,
@@ -219,4 +268,4 @@ if __name__ == "__main__":
     )
 
     # Gather clients' local analytics back to the orchestrating node in order to back up the files
-    gather_analytics(saving_path, node)
+    # gather_analytics(saving_path, node)
