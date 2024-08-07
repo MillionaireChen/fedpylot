@@ -1,6 +1,7 @@
 # FedPylot by Cyprien Quéméneur, GPL-3.0 license
 
 import argparse
+import copy
 import os
 import shutil
 import sys
@@ -104,10 +105,6 @@ def federated_loop(node: Node, nrounds: int, epochs: int, saving_path: str, arch
             node.set_weights(sd_encrypted, metadata=False)
 
 
-def aggregate_models(nodes:List[Node]):
-    pass
-
-
 def federated_loop_local_version(nodes: List[Node], nrounds: int, epochs: int, saving_path: str, architecture: str,
                                  pretrained_weights: str,
                                  data: str, bsz_train: int, bsz_val: int, imgsz: int, conf_thres: float,
@@ -119,28 +116,19 @@ def federated_loop_local_version(nodes: List[Node], nrounds: int, epochs: int, s
 
     """Orchestrate the federated learning experiment."""
     for kround in range(nrounds):
+        updates=[]
         for node in nodes:
             # At the beginning of a round, generate and share a new symmetric key
             # share_symmetric_key(node)
             # If it is the first round, the central server sends the initial checkpoint to the clients
             # Client level computation (local training)
             node.train(nrounds, kround, epochs, architecture, data, bsz_train, imgsz, cfg, hyp, workers, saving_path)
-
-        aggregate_models(nodes)
+            update_sample_pair=node.get_update_without_encrypto()
+            updates.append(update_sample_pair)
+        nodes[0].aggregate_local(updates)
         nodes[0].test(kround, saving_path, data, bsz_val, imgsz, conf_thres, iou_thres)
-            # Server level computation (server optimization, re-parameterization, and evaluation on the validation set)
-            # if node.rank == 0:
-            #     sd_encrypted.pop(0)
-            #     node.aggregate(sd_encrypted)
-            #     node.reparameterize(architecture)
-            #     node.test(kround, saving_path, data, bsz_val, imgsz, conf_thres, iou_thres)
-            #     sd_encrypted = [None] + node.get_weights(metadata=False)
-            # else:
-            #     sd_encrypted = None
-            # # New weights are shared with the clients
-            # sd_encrypted = comm.scatter(sd_encrypted, root=0)
-            # if node.rank != 0:
-            #     node.set_weights(sd_encrypted, metadata=False)
+        new_weights=copy.deepcopy(nodes[0]._ckpt)
+        [nodei.set_weights_plaintext(new_weights) for nodei in nodes]
 
 
 def gather_analytics(saving_path: str, node: Node) -> None:

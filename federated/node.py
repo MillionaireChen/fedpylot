@@ -16,9 +16,12 @@ import torch
 import yaml
 
 from models.yolo import Model
+from typing import Tuple
 from utils.torch_utils import intersect_dicts, is_parallel, select_device
+
 # Add the Model class to safe globals
 torch.serialization.add_safe_globals([Model])
+
 
 def get_device():
     """
@@ -39,6 +42,7 @@ def get_device():
         device = torch.device('cpu')
         print('Using CPU')
     return device.type
+
 
 class Node:
     """General node logic common to the server and clients. Allows server-side and client-side evaluation."""
@@ -141,12 +145,18 @@ class Node:
             # Re-parameterization of P5 models
             idx = id_mp[architecture]
             for i in range((model.nc + 5) * anchors):
-                model.state_dict()[f'model.{idx}.m.0.weight'].data[i, :, :, :] *= sd[f'model.{idx}.im.0.implicit'].data[:, i, ::].squeeze()
-                model.state_dict()[f'model.{idx}.m.1.weight'].data[i, :, :, :] *= sd[f'model.{idx}.im.1.implicit'].data[:, i, ::].squeeze()
-                model.state_dict()[f'model.{idx}.m.2.weight'].data[i, :, :, :] *= sd[f'model.{idx}.im.2.implicit'].data[:, i, ::].squeeze()
-            model.state_dict()[f'model.{idx}.m.0.bias'].data += sd[f'model.{idx}.m.0.weight'].mul(sd[f'model.{idx}.ia.0.implicit']).sum(1).squeeze()
-            model.state_dict()[f'model.{idx}.m.1.bias'].data += sd[f'model.{idx}.m.1.weight'].mul(sd[f'model.{idx}.ia.1.implicit']).sum(1).squeeze()
-            model.state_dict()[f'model.{idx}.m.2.bias'].data += sd[f'model.{idx}.m.2.weight'].mul(sd[f'model.{idx}.ia.2.implicit']).sum(1).squeeze()
+                model.state_dict()[f'model.{idx}.m.0.weight'].data[i, :, :, :] *= sd[f'model.{idx}.im.0.implicit'].data[
+                                                                                  :, i, ::].squeeze()
+                model.state_dict()[f'model.{idx}.m.1.weight'].data[i, :, :, :] *= sd[f'model.{idx}.im.1.implicit'].data[
+                                                                                  :, i, ::].squeeze()
+                model.state_dict()[f'model.{idx}.m.2.weight'].data[i, :, :, :] *= sd[f'model.{idx}.im.2.implicit'].data[
+                                                                                  :, i, ::].squeeze()
+            model.state_dict()[f'model.{idx}.m.0.bias'].data += sd[f'model.{idx}.m.0.weight'].mul(
+                sd[f'model.{idx}.ia.0.implicit']).sum(1).squeeze()
+            model.state_dict()[f'model.{idx}.m.1.bias'].data += sd[f'model.{idx}.m.1.weight'].mul(
+                sd[f'model.{idx}.ia.1.implicit']).sum(1).squeeze()
+            model.state_dict()[f'model.{idx}.m.2.bias'].data += sd[f'model.{idx}.m.2.weight'].mul(
+                sd[f'model.{idx}.ia.2.implicit']).sum(1).squeeze()
             model.state_dict()[f'model.{idx}.m.0.bias'].data *= sd[f'model.{idx}.im.0.implicit'].data.squeeze()
             model.state_dict()[f'model.{idx}.m.1.bias'].data *= sd[f'model.{idx}.im.1.implicit'].data.squeeze()
             model.state_dict()[f'model.{idx}.m.2.bias'].data *= sd[f'model.{idx}.im.2.implicit'].data.squeeze()
@@ -171,14 +181,26 @@ class Node:
             model.state_dict()[f'model.{idx}.m.2.bias'].data += sd[f'model.{idx2}.m.2.bias'].data
             model.state_dict()[f'model.{idx}.m.3.bias'].data += sd[f'model.{idx2}.m.3.bias'].data
             for i in range((model.nc + 5) * anchors):
-                model.state_dict()[f'model.{idx}.m.0.weight'].data[i, :, :, :] *= sd[f'model.{idx2}.im.0.implicit'].data[:, i, : :].squeeze()
-                model.state_dict()[f'model.{idx}.m.1.weight'].data[i, :, :, :] *= sd[f'model.{idx2}.im.1.implicit'].data[:, i, : :].squeeze()
-                model.state_dict()[f'model.{idx}.m.2.weight'].data[i, :, :, :] *= sd[f'model.{idx2}.im.2.implicit'].data[:, i, : :].squeeze()
-                model.state_dict()[f'model.{idx}.m.3.weight'].data[i, :, :, :] *= sd[f'model.{idx2}.im.3.implicit'].data[:, i, : :].squeeze()
-            model.state_dict()[f'model.{idx}.m.0.bias'].data += sd[f'model.{idx2}.m.0.weight'].mul(sd[f'model.{idx2}.ia.0.implicit']).sum(1).squeeze()
-            model.state_dict()[f'model.{idx}.m.1.bias'].data += sd[f'model.{idx2}.m.1.weight'].mul(sd[f'model.{idx2}.ia.1.implicit']).sum(1).squeeze()
-            model.state_dict()[f'model.{idx}.m.2.bias'].data += sd[f'model.{idx2}.m.2.weight'].mul(sd[f'model.{idx2}.ia.2.implicit']).sum(1).squeeze()
-            model.state_dict()[f'model.{idx}.m.3.bias'].data += sd[f'model.{idx2}.m.3.weight'].mul(sd[f'model.{idx2}.ia.3.implicit']).sum(1).squeeze()
+                model.state_dict()[f'model.{idx}.m.0.weight'].data[i, :, :, :] *= sd[
+                                                                                      f'model.{idx2}.im.0.implicit'].data[
+                                                                                  :, i, ::].squeeze()
+                model.state_dict()[f'model.{idx}.m.1.weight'].data[i, :, :, :] *= sd[
+                                                                                      f'model.{idx2}.im.1.implicit'].data[
+                                                                                  :, i, ::].squeeze()
+                model.state_dict()[f'model.{idx}.m.2.weight'].data[i, :, :, :] *= sd[
+                                                                                      f'model.{idx2}.im.2.implicit'].data[
+                                                                                  :, i, ::].squeeze()
+                model.state_dict()[f'model.{idx}.m.3.weight'].data[i, :, :, :] *= sd[
+                                                                                      f'model.{idx2}.im.3.implicit'].data[
+                                                                                  :, i, ::].squeeze()
+            model.state_dict()[f'model.{idx}.m.0.bias'].data += sd[f'model.{idx2}.m.0.weight'].mul(
+                sd[f'model.{idx2}.ia.0.implicit']).sum(1).squeeze()
+            model.state_dict()[f'model.{idx}.m.1.bias'].data += sd[f'model.{idx2}.m.1.weight'].mul(
+                sd[f'model.{idx2}.ia.1.implicit']).sum(1).squeeze()
+            model.state_dict()[f'model.{idx}.m.2.bias'].data += sd[f'model.{idx2}.m.2.weight'].mul(
+                sd[f'model.{idx2}.ia.2.implicit']).sum(1).squeeze()
+            model.state_dict()[f'model.{idx}.m.3.bias'].data += sd[f'model.{idx2}.m.3.weight'].mul(
+                sd[f'model.{idx2}.ia.3.implicit']).sum(1).squeeze()
             model.state_dict()[f'model.{idx}.m.0.bias'].data *= sd[f'model.{idx2}.im.0.implicit'].data.squeeze()
             model.state_dict()[f'model.{idx}.m.1.bias'].data *= sd[f'model.{idx2}.im.1.implicit'].data.squeeze()
             model.state_dict()[f'model.{idx}.m.2.bias'].data *= sd[f'model.{idx2}.im.2.implicit'].data.squeeze()
@@ -337,6 +359,24 @@ class Server(Node):
             delta_t[key] = torch.sum(torch.stack(delta_it_weighted), dim=0)
         return delta_t
 
+
+    def compute_pseudo_gradient(self, updates_queue:list[Tuple[dict,int]]) -> dict:
+        """Compute the pseudo-gradient using the weighted average of the updates received from the clients."""
+        n = 0
+        updates=[]
+        nsamples_list=[]
+        for item in updates:
+            n+=item[1]
+            nsamples_list.append(item[1])
+            updates.append(item[0])
+
+        delta_t = copy.deepcopy(self._ckpt['model'].state_dict())
+        for key in delta_t.keys():
+            delta_it_weighted = [delta_it[key] * (ni / n) for delta_it, ni in zip(updates, nsamples_list)]
+            delta_t[key] = torch.sum(torch.stack(delta_it_weighted), dim=0)
+        return delta_t
+
+
     def __fedavg(self, delta_t: dict) -> dict:
         """Compute the new weights using the FedAvg algorithm (server opt is SGD, default lr is 1)."""
         w_t = copy.deepcopy(self._ckpt['model'].state_dict())
@@ -427,6 +467,37 @@ class Server(Node):
         model.load_state_dict(new_sd)
         self._ckpt['model'] = model
 
+    def aggregate_local(self, state_dicts_encrypted: list[tuple[dict, int]]) -> None:
+        """Compute the weights for the next communication round using the clients' local updates."""
+        delta_t = self.compute_pseudo_gradient(state_dicts_encrypted)
+        if self.server_opt == 'fedavg':
+            new_sd = self.__fedavg(delta_t)
+        elif self.server_opt == 'fedavgm':
+            if self.v_t is None:
+                self.v_t = {key: torch.zeros_like(delta_t[key]) for key in delta_t.keys()}
+            new_sd = self.__fedavgm(delta_t)
+        elif self.server_opt == 'fedadagrad':
+            if self.v_t is None:
+                self.v_t = {key: torch.zeros_like(delta_t[key]) for key in delta_t.keys()}
+            new_sd = self.__fedadagrad(delta_t)
+        elif self.server_opt == 'fedadam':
+            if self.m_t is None:
+                self.m_t = {key: torch.zeros_like(delta_t[key]) for key in delta_t.keys()}
+            if self.v_t is None:
+                self.v_t = {key: torch.zeros_like(delta_t[key]) for key in delta_t.keys()}
+            new_sd = self.__fedadam(delta_t)
+        elif self.server_opt == 'fedyogi':
+            if self.m_t is None:
+                self.m_t = {key: torch.zeros_like(delta_t[key]) for key in delta_t.keys()}
+            if self.v_t is None:
+                self.v_t = {key: torch.zeros_like(delta_t[key]) for key in delta_t.keys()}
+            new_sd = self.__fedyogi(delta_t)
+        else:
+            raise ValueError('Server optimizer not recognized, must be fedavg, fedavgm, fedadagrad, fedadam or fedyogi')
+        model = self._ckpt['model']
+        model.load_state_dict(new_sd)
+        self._ckpt['model'] = model
+
 
 class Client(Node):
     """Specific client logic (local training, update and key sharing)."""
@@ -470,6 +541,9 @@ class Client(Node):
               f' {sys.getsizeof(MPI.pickle.dumps((encrypted_update, tag, nonce, self.nsamples)))}')
         return encrypted_update, tag, nonce, self.nsamples
 
+    def get_update_without_encryto(self) -> Tuple[dict, int]:
+        return self.__update, self.nsamples
+
     def set_weights(self, encrypted_data: tuple[bytes, bytes, bytes], metadata: bool) -> None:
         """Decrypt the weights or checkpoint with the symmetric key and save it."""
         new_weights_encrypted, tag, nonce = encrypted_data
@@ -480,6 +554,11 @@ class Client(Node):
             model = self._ckpt['model']
             model.load_state_dict(new_weights)
             self._ckpt['model'] = model
+    def set_weights_plaintext(self, weights) -> None:
+        """Decrypt the weights or checkpoint with the symmetric key and save it."""
+        model = self._ckpt['model']
+        model.load_state_dict(weights)
+        self._ckpt['model'] = model
 
     def train(self, nrounds: int, kround: int, epochs: int, architecture: str, data: str, bsz_train: int, imgsz: int,
               cfg: str, hyp: str, workers: int, saving_path: str) -> None:
