@@ -17,7 +17,28 @@ import yaml
 
 from models.yolo import Model
 from utils.torch_utils import intersect_dicts, is_parallel, select_device
+# Add the Model class to safe globals
+torch.serialization.add_safe_globals([Model])
 
+def get_device():
+    """
+    Determines the best available device to run computations based on the hardware capabilities.
+    Returns:
+        device (torch.device): The determined best device ('cuda', 'mps', or 'cpu').
+    """
+    # Check for CUDA GPU availability
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f'Using CUDA: {torch.cuda.get_device_name(torch.cuda.current_device())}')
+    # Check for MPS availability (requires PyTorch 1.12 or higher on macOS with Apple Silicon)
+    elif torch.backends.mps.is_available():
+        device = torch.device('mps')
+        print('Using Apple MPS')
+    # Default to CPU if neither CUDA nor MPS are available
+    else:
+        device = torch.device('cpu')
+        print('Using CPU')
+    return device.type
 
 class Node:
     """General node logic common to the server and clients. Allows server-side and client-side evaluation."""
@@ -25,7 +46,7 @@ class Node:
     def __init__(self, rank: int) -> None:
         """Initialize the node with its rank, device, public and private keys."""
         self.rank = rank
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = get_device()
         self._ckpt = None
         self._ckpt_reparam = None
         self._private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -51,6 +72,11 @@ class Node:
                   f'Using GPU {device_id} ({properties.name}) '
                   f'of compute capability {properties.major}.{properties.minor} with '
                   f'{properties.total_memory / 1e9:.1f}Gb total memory.')
+        elif self.device == 'mps':
+            # MPS backend for Apple Silicon GPUs
+            device_id = torch.device('mps')
+            print(f'Node of rank {self.rank}: '
+                  f'Using Apple MPS GPU for training.')
         else:
             print(f'Node of rank {self.rank}: Using CPU for training.')
 
